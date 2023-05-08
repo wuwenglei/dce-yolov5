@@ -46,6 +46,8 @@ from utils.metrics import ConfusionMatrix, ap_per_class, box_iou
 from utils.plots import output_to_target, plot_images, plot_val_study
 from utils.torch_utils import select_device, smart_inference_mode
 
+from ZERO_DCE import Myloss
+
 
 def save_one_txt(predn, save_conf, shape, file):
     # Save one txt result
@@ -192,6 +194,11 @@ def run(
     tp, fp, p, r, f1, mp, mr, map50, ap50, map = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
     dt = Profile(), Profile(), Profile()  # profiling times
     loss = torch.zeros(3, device=device)
+    loss_dce = torch.zeros(4, device=device)
+    L_color = Myloss.L_color()
+    L_spa = Myloss.L_spa()
+    L_exp = Myloss.L_exp(16,0.6)
+    L_TV = Myloss.L_TV()
     jdict, stats, ap, ap_class = [], [], [], []
     callbacks.run('on_val_start')
     pbar = tqdm(dataloader, desc=s, bar_format=TQDM_BAR_FORMAT)  # progress bar
@@ -207,11 +214,25 @@ def run(
 
         # Inference
         with dt[1]:
-            preds, train_out = model(im) if compute_loss else (model(im, augment=augment), None)
+            if compute_loss:
+                preds_train_out, enhanced_images, As = model(im)
+                preds, train_out = preds_train_out[0], preds_train_out[1]
+                loss_tv = 200 * L_TV(As)
+                loss_spa = torch.mean(L_spa(enhanced_images.float(), im.float()))
+                loss_col = 5 * torch.mean(L_color(enhanced_images))
+                loss_exp = 10 * torch.mean(L_exp(enhanced_images))
+            else:
+                preds, _, _ = model(im, augment=augment)
+                train_out = None
+            # preds, train_out = model(im) if compute_loss else (model(im, augment=augment), None)
 
         # Loss
         if compute_loss:
             loss += compute_loss(train_out, targets)[1]  # box, obj, cls
+            loss_dce += torch.cat((torch.tensor([loss_tv], device=device), 
+                                   torch.tensor([loss_spa], device=device),
+                                   torch.tensor([loss_col], device=device),
+                                   torch.tensor([loss_exp], device=device))).detach()
 
         # NMS
         targets[:, 2:] *= torch.tensor((width, height, width, height), device=device)  # to pixels
@@ -334,7 +355,7 @@ def run(
     maps = np.zeros(nc) + map
     for i, c in enumerate(ap_class):
         maps[c] = ap[i]
-    return (mp, mr, map50, map, *(loss.cpu() / len(dataloader)).tolist()), maps, t
+    return (mp, mr, map50, map, *(loss.cpu() / len(dataloader)).tolist(), *(loss_dce.cpu() / len(dataloader)).tolist()), maps, t
 
 
 def parse_opt():

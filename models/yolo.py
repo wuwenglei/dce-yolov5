@@ -29,6 +29,8 @@ from utils.plots import feature_visualization
 from utils.torch_utils import (fuse_conv_and_bn, initialize_weights, model_info, profile, scale_img, select_device,
                                time_sync)
 
+from ZERO_DCE.model import enhance_net_nopool as DCE
+
 try:
     import thop  # for FLOPs computation
 except ImportError:
@@ -108,6 +110,8 @@ class Segment(Detect):
 
 class BaseModel(nn.Module):
     # YOLOv5 base model
+    # DCE = DCE().to(select_device('0'))
+
     def forward(self, x, profile=False, visualize=False):
         return self._forward_once(x, profile, visualize)  # single-scale inference, train
 
@@ -185,6 +189,7 @@ class DetectionModel(BaseModel):
         self.model, self.save = parse_model(deepcopy(self.yaml), ch=[ch])  # model, savelist
         self.names = [str(i) for i in range(self.yaml['nc'])]  # default names
         self.inplace = self.yaml.get('inplace', True)
+        self.DCE = DCE()
 
         # Build strides, anchors
         m = self.model[-1]  # Detect()
@@ -192,7 +197,9 @@ class DetectionModel(BaseModel):
             s = 256  # 2x min stride
             m.inplace = self.inplace
             forward = lambda x: self.forward(x)[0] if isinstance(m, Segment) else self.forward(x)
-            m.stride = torch.tensor([s / x.shape[-2] for x in forward(torch.zeros(1, ch, s, s))])  # forward
+            # print(forward(torch.zeros(1, ch, s, s))[0][0])
+            # sys.exit()
+            m.stride = torch.tensor([s / x.shape[-2] if idx > 0 else s / x[0].shape[-2] for idx, x in enumerate(forward(torch.zeros(1, ch, s, s)))])  # forward
             check_anchor_order(m)
             m.anchors /= m.stride.view(-1, 1, 1)
             self.stride = m.stride
@@ -204,9 +211,10 @@ class DetectionModel(BaseModel):
         LOGGER.info('')
 
     def forward(self, x, augment=False, profile=False, visualize=False):
+        _, enhanced_image, A = self.DCE(x)
         if augment:
-            return self._forward_augment(x)  # augmented inference, None
-        return self._forward_once(x, profile, visualize)  # single-scale inference, train
+            return self._forward_augment(enhanced_image), enhanced_image, A  # augmented inference, None
+        return self._forward_once(enhanced_image, profile, visualize), enhanced_image, A  # single-scale inference, train
 
     def _forward_augment(self, x):
         img_size = x.shape[-2:]  # height, width

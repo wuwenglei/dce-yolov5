@@ -71,14 +71,22 @@ class Loggers():
         self.keys = [
             'train/box_loss',
             'train/obj_loss',
-            'train/cls_loss',  # train loss
+            'train/cls_loss',
+            'train/loss_tv',
+            'train/loss_spa',
+            'train/loss_col',
+            'train/loss_exp',  # train loss
             'metrics/precision',
             'metrics/recall',
             'metrics/mAP_0.5',
             'metrics/mAP_0.5:0.95',  # metrics
             'val/box_loss',
             'val/obj_loss',
-            'val/cls_loss',  # val loss
+            'val/cls_loss',
+            'val/loss_tv',
+            'val/loss_spa',
+            'val/loss_col',
+            'val/loss_exp',  # val loss
             'x/lr0',
             'x/lr1',
             'x/lr2']  # params
@@ -169,7 +177,7 @@ class Loggers():
                 self.comet_logger.on_pretrain_routine_end(paths)
 
     def on_train_batch_end(self, model, ni, imgs, targets, paths, vals):
-        log_dict = dict(zip(self.keys[:3], vals))
+        log_dict = dict(zip(self.keys[:7], vals))
         # Callback runs on train batch end
         # ni: number integrated batches (since train start)
         if self.plots:
@@ -225,7 +233,16 @@ class Loggers():
 
     def on_fit_epoch_end(self, vals, epoch, best_fitness, fi):
         # Callback runs at the end of each fit (train+val) epoch
+        # for k in self.keys:
+        #     print(k)
+        # for v in vals:
+        #     print(v)
         x = dict(zip(self.keys, vals))
+        # for k, v in x.items():
+        #     print(k, v)
+        # print(len(self.keys), len(vals), len(x))
+        # import sys
+        # sys.exit()
         if self.csv:
             file = self.save_dir / 'results.csv'
             n = len(x) + 1  # number of cols
@@ -282,7 +299,7 @@ class Loggers():
                 self.tb.add_image(f.stem, cv2.imread(str(f))[..., ::-1], epoch, dataformats='HWC')
 
         if self.wandb:
-            self.wandb.log(dict(zip(self.keys[3:10], results)))
+            self.wandb.log(dict(zip(self.keys[7:18], results)))
             self.wandb.log({'Results': [wandb.Image(str(f), caption=f.name) for f in files]})
             # Calling wandb.log. TODO: Refactor this into WandbLogger.log_model
             if not self.opt.evolve:
@@ -298,7 +315,7 @@ class Loggers():
                                                   auto_delete_file=False)
 
         if self.comet_logger:
-            final_results = dict(zip(self.keys[3:10], results))
+            final_results = dict(zip(self.keys[7:18], results))
             self.comet_logger.on_train_end(files, self.save_dir, last, best, epoch, final_results)
 
     def on_params_update(self, params: dict):
