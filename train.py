@@ -128,6 +128,8 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
         exclude = ['anchor'] if (cfg or hyp.get('anchors')) and not resume else []  # exclude keys
         csd = ckpt['model'].float().state_dict()  # checkpoint state_dict as FP32
         csd = intersect_dicts(csd, model.state_dict(), exclude=exclude)  # intersect
+        # dce_ckpt = torch.load('zero-dce.pth', map_location='cpu')
+        # model.DCE.load_state_dict(dce_ckpt, strict=False)
         model.load_state_dict(csd, strict=False)  # load
         LOGGER.info(f'Transferred {len(csd)}/{len(model.state_dict())} items from {weights}')  # report
     else:
@@ -269,6 +271,22 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                 f'Using {train_loader.num_workers * WORLD_SIZE} dataloader workers\n'
                 f"Logging results to {colorstr('bold', save_dir)}\n"
                 f'Starting training for {epochs} epochs...')
+    
+    # # Validation before first epoch
+    # results, _, _ = validate.run(data_dict,
+    #                                 batch_size=batch_size // WORLD_SIZE * 2,
+    #                                 imgsz=imgsz,
+    #                                 half=amp,
+    #                                 model=ema.ema,
+    #                                 single_cls=single_cls,
+    #                                 dataloader=val_loader,
+    #                                 save_dir=save_dir,
+    #                                 plots=False,
+    #                                 callbacks=callbacks,
+    #                                 compute_loss=compute_loss)
+    # print(results)
+    # print(model.state_dict()['DCE.e_conv1.weight'][0][0])
+
     for epoch in range(start_epoch, epochs):  # epoch ------------------------------------------------------------------
         callbacks.run('on_train_epoch_start')
         model.train()
@@ -345,7 +363,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
             if ni - last_opt_step >= accumulate:
                 scaler.unscale_(optimizer)  # unscale gradients
                 # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=10.0)  # clip gradients
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=0.1)  # clip gradients
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=10.0)  # clip gradients
                 scaler.step(optimizer)  # optimizer.step
                 scaler.update()
                 optimizer.zero_grad()

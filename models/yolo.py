@@ -190,6 +190,7 @@ class DetectionModel(BaseModel):
         self.names = [str(i) for i in range(self.yaml['nc'])]  # default names
         self.inplace = self.yaml.get('inplace', True)
         self.DCE = DCE()
+        # self.DCE.load_state_dict(torch.load('zero-dce.pth'))
 
         # Build strides, anchors
         m = self.model[-1]  # Detect()

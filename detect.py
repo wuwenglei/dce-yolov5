@@ -129,7 +129,8 @@ def run(
         with dt[1]:
             visualize = increment_path(save_dir / Path(path).stem, mkdir=True) if visualize else False
             pred, enhanced_image, A = model(im, augment=augment, visualize=visualize)
-            # torchvision.utils.save_image(im, './2015_03750_2.png')
+            # torchvision.utils.save_image(im, '../datasets/ExDark_Test/2015_03016/2015_03016_dl.png')
+            # torchvision.utils.save_image(enhanced_image, '../datasets/ExDark_Test/2015_03016/2015_03016_dce_yolo.png')
 
         # NMS
         with dt[2]:
